@@ -43,12 +43,6 @@ pipeline {
       }
     }
 
-    stage('Quality Gate') {
-      steps {
-        echo "Skipping Quality Gate check for now"
-      }
-    }
-
     stage('Trivy Scan (Source)') {
       steps {
         sh '''
