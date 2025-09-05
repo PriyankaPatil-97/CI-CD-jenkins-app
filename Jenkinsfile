@@ -24,22 +24,22 @@ pipeline {
         sh 'mvn -B -DskipTests clean package'
       }
     }
-
-             stage('Test') {
-            steps {
-                echo "Running Unit Tests..."
-                sh 'mvn test'
-            }
-        }
-
-
-       stage('SonarQube Analysis') {
+    stage('Unit Tests') {
+      steps {
+        sh 'mvn -B test'
+        junit '**/target/surefire-reports/*.xml'
+      }
+    }
+        stage('SonarQube Analysis') {
       steps {
         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
           withSonarQubeEnv('SonarQube') {
             sh 'mvn -B sonar:sonar -Dsonar.login=$SONAR_TOKEN'
           }
         }
+      }
+    }
+
 
 
     stage('Trivy Scan (Source)') {
