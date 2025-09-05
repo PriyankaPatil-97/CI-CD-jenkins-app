@@ -33,15 +33,13 @@ pipeline {
         }
 
 
-    stage('SonarQube Analysis') {
+       stage('SonarQube Analysis') {
       steps {
         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
           withSonarQubeEnv('SonarQube') {
             sh 'mvn -B sonar:sonar -Dsonar.login=$SONAR_TOKEN'
           }
-        }
-      }
-    }
+
 
     stage('Trivy Scan (Source)') {
       steps {
