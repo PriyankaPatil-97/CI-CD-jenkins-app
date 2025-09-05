@@ -3,99 +3,88 @@ pipeline {
 
     environment {
         AWS_ACCOUNT_ID = "676206916950"
-        AWS_REGION     = "ap-south-1"
-        ECR_REPO       = "my-sample-app"
-        IMAGE_NAME     = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}"
-        IMAGE_TAG      = "${BUILD_NUMBER}"
+        AWS_REGION = "us-east-1"          // change if needed
+        ECR_REPO_NAME = "ci-cd-jenkins-app"
+        IMAGE_TAG = "latest"
+        SONARQUBE = "sonarqube"           // Jenkins SonarQube server name (configure in Manage Jenkins)
     }
 
-    tools { maven "Maven" }
-
     stages {
+
         stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/PriyankaPatil-97/CI-CD-jenkins-app.git'
             }
         }
 
-        
-   stage('Test') {
+        stage('Build') {
             steps {
-                echo "Running Unit Tests..."
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('Test') {
+            steps {
                 sh 'mvn test'
             }
         }
 
-
         stage('SonarQube Analysis') {
             steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    withSonarQubeEnv('SonarQube') {
-                        sh "mvn sonar:sonar -Dsonar.login=$SONAR_TOKEN"
-                    }
+                withSonarQubeEnv("${SONARQUBE}") {
+                    sh 'mvn sonar:sonar'
                 }
             }
         }
 
-        stage('Trivy Scan (Code)') {
+        stage('Trivy FS Scan') {
             steps {
-                sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL . || true'
+                sh '''
+                  trivy fs --exit-code 0 --severity HIGH,CRITICAL .
+                '''
             }
         }
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+                script {
+                    sh """
+                      docker build -t ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} .
+                    """
+                }
             }
         }
 
-        stage('Trivy Scan (Image)') {
+        stage('Trivy Image Scan') {
             steps {
-                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG} || true'
+                sh """
+                  trivy image --exit-code 0 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
+                """
             }
         }
 
         stage('ECR Login & Push') {
             steps {
-                sh '''
-                  aws ecr get-login-password --region ${AWS_REGION} | \
-                  docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-                  
-                  docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                '''
+                script {
+                    sh """
+                      aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                      aws ecr describe-repositories --repository-names ${ECR_REPO_NAME} --region ${AWS_REGION} || aws ecr create-repository --repository-name ${ECR_REPO_NAME} --region ${AWS_REGION}
+                      docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
+                    """
+                }
             }
         }
 
-        stage('Deploy (Local Docker)') {
+        stage('Deploy Local Docker') {
             steps {
-                sh '''
-                  docker stop my-sample-app || true
-                  docker rm my-sample-app || true
-                  docker run -d -p 9090:9090 --name my-sample-app ${IMAGE_NAME}:${IMAGE_TAG}
-                '''
+                script {
+                    sh """
+                      docker rm -f myapp || true
+                      docker run -d --name myapp -p 9091:8080 ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
+                    """
+                }
             }
-        }
-
-        stage('Deploy to ECS') {
-            steps {
-                sh '''
-                  # Force ECS service to pull the new image and redeploy
-                  aws ecs update-service \
-                    --cluster my-sample-cluster \
-                    --service my-sample-service \
-                    --force-new-deployment \
-                    --region ${AWS_REGION}
-                '''
-            }
-        }
-    }
-
-    post {
-        always {
-            echo "Pipeline finished"
-        }
-        failure {
-            echo "Pipeline failed! Check logs."
         }
     }
 }
