@@ -24,13 +24,15 @@ pipeline {
         sh 'mvn -B -DskipTests clean package'
       }
     }
+
     stage('Unit Tests') {
       steps {
         sh 'mvn -B test'
         junit '**/target/surefire-reports/*.xml'
       }
     }
-        stage('SonarQube Analysis') {
+
+    stage('SonarQube Analysis') {
       steps {
         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
           withSonarQubeEnv('SonarQube') {
@@ -40,7 +42,11 @@ pipeline {
       }
     }
 
-
+    stage('Quality Gate') {
+      steps {
+        echo "Skipping Quality Gate check for now"
+      }
+    }
 
     stage('Trivy Scan (Source)') {
       steps {
