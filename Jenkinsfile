@@ -39,6 +39,7 @@ pipeline {
           withSonarQubeEnv('SonarQube') {
             sh 'mvn -B sonar:sonar -Dsonar.login=$SONAR_TOKEN'
           }
+        }
 
 
     stage('Trivy Scan (Source)') {
