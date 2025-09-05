@@ -18,15 +18,13 @@ pipeline {
             }
         }
 
-        stage('Build & Test') {
-            steps {
-                // Compile and package the app
-                sh 'mvn clean package'
-
-                // Run unit tests and publish results
-                junit 'target/surefire-reports/*.xml'
-            }
-        }
+        
+    stage('Unit Tests') {
+      steps {
+        sh 'mvn -B test'
+        junit '**/target/surefire-reports/*.xml'
+      }
+    }
 
         stage('SonarQube Analysis') {
             steps {
