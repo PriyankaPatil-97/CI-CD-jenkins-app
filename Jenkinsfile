@@ -22,12 +22,13 @@ pipeline {
             }
         }
 
-        stage('Unit Tests') {
-            steps {
-                sh 'mvn test'
-                junit '**/target/surefire-reports/*.xml'
-            }
-        }
+      stage('Test') {
+    steps {
+        sh 'mvn test'
+        junit 'target/surefire-reports/*.xml'
+    }
+}
+
 
         stage('SonarQube Analysis') {
             steps {
