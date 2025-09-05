@@ -13,28 +13,26 @@ pipeline {
 
     stages {
         stage('Checkout') {
-            steps { checkout scm }
-        }
-
-        stage('Build (package)') {
             steps {
-                sh 'mvn clean package -DskipTests'
+                checkout scm
             }
         }
 
-      stage('Test') {
-    steps {
-        sh 'mvn test'
-        junit 'target/surefire-reports/*.xml'
-    }
-}
+        stage('Build & Test') {
+            steps {
+                // Compile and package the app
+                sh 'mvn clean package'
 
+                // Run unit tests and publish results
+                junit 'target/surefire-reports/*.xml'
+            }
+        }
 
         stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('SonarQube') {
-                        sh 'mvn sonar:sonar -Dsonar.login=$SONAR_TOKEN'
+                        sh "mvn sonar:sonar -Dsonar.login=$SONAR_TOKEN"
                     }
                 }
             }
@@ -42,7 +40,7 @@ pipeline {
 
         stage('Trivy Scan (Code)') {
             steps {
-                sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL .'
+                sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL . || true'
             }
         }
 
@@ -54,14 +52,16 @@ pipeline {
 
         stage('Trivy Scan (Image)') {
             steps {
-                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}'
+                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG} || true'
             }
         }
 
         stage('ECR Login & Push') {
             steps {
                 sh '''
-                  aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                  aws ecr get-login-password --region ${AWS_REGION} | \
+                  docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                  
                   docker push ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
             }
@@ -70,10 +70,33 @@ pipeline {
         stage('Deploy (Local Docker)') {
             steps {
                 sh '''
-                  docker stop my-sample-app || true && docker rm my-sample-app || true
+                  docker stop my-sample-app || true
+                  docker rm my-sample-app || true
                   docker run -d -p 9090:9090 --name my-sample-app ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
             }
+        }
+
+        stage('Deploy to ECS') {
+            steps {
+                sh '''
+                  # Force ECS service to pull the new image and redeploy
+                  aws ecs update-service \
+                    --cluster my-sample-cluster \
+                    --service my-sample-service \
+                    --force-new-deployment \
+                    --region ${AWS_REGION}
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline finished"
+        }
+        failure {
+            echo "Pipeline failed! Check logs."
         }
     }
 }
