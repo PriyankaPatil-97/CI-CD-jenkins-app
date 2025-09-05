@@ -19,12 +19,13 @@ pipeline {
         }
 
         
-    stage('Unit Tests') {
-      steps {
-        sh 'mvn -B test'
-        junit '**/target/surefire-reports/*.xml'
-      }
-    }
+   stage('Test') {
+            steps {
+                echo "Running Unit Tests..."
+                sh 'mvn test'
+            }
+        }
+
 
         stage('SonarQube Analysis') {
             steps {
